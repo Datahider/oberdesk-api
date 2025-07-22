@@ -118,32 +118,31 @@ class getDashboardData extends AbstractFunctionImplementation {
     protected function getTickets(array $params): array {
         $sql = <<<FIN
                 SELECT 
-                    id,
-                    type,
+                    t.id,
+                    t.type,
                     CASE
-                        WHEN type = 1 THEN '🎓️'
-                        WHEN type = 2 THEN '⭐️'
-                        WHEN type = 3 THEN '❗️'
-                        WHEN type = 4 THEN '🗣'
-                        WHEN type = 5 THEN '👑'
-                        WHEN type = 6 THEN '‼️'
-                        WHEN type = 7 THEN '🔥'
-                        WHEN type = 8 THEN '🤖'
-                        WHEN type = 9 THEN '🔞'
+                        WHEN t.type = 1 THEN '🎓️'
+                        WHEN t.type = 2 THEN '⭐️'
+                        WHEN t.type = 3 THEN '❗️'
+                        WHEN t.type = 4 THEN '🗣'
+                        WHEN t.type = 5 THEN '👑'
+                        WHEN t.type = 6 THEN '‼️'
+                        WHEN t.type = 7 THEN '🔥'
+                        WHEN t.type = 8 THEN '🤖'
+                        WHEN t.type = 9 THEN '🔞'
                         ELSE ''
                     END AS type_emoji, 
-                    topic_title AS title,
-                    chat_id,
-                    status,
-                    0 AS seconds_total,
-                    0 AS seconds_today,
+                    t.topic_title AS title,
+                    CONCAT('https://t.me/c/', SUBSTRING(t.chat_id, 5), '/', t.topic_id) AS topic_link,
+                    t.chat_id,
+                    t.status,
                     CASE 
-                        WHEN last_admin_activity = 0 THEN NULL
-                        ELSE DATE_FORMAT(CONVERT_TZ(DATE_ADD('1970-01-01 00:00:00', INTERVAL last_admin_activity SECOND), '+00:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s')
+                        WHEN t.last_admin_activity = 0 THEN NULL
+                        ELSE DATE_FORMAT(CONVERT_TZ(DATE_ADD('1970-01-01 00:00:00', INTERVAL t.last_admin_activity SECOND), '+00:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s')
                     END AS last_admin_activity,
                     CASE
-                        WHEN last_activity = 0 THEN NULL
-                        ELSE DATE_FORMAT(CONVERT_TZ(DATE_ADD('1970-01-01 00:00:00', INTERVAL last_activity SECOND), '+00:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s') 
+                        WHEN t.last_activity = 0 THEN NULL
+                        ELSE DATE_FORMAT(CONVERT_TZ(DATE_ADD('1970-01-01 00:00:00', INTERVAL t.last_activity SECOND), '+00:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s') 
                     END AS last_activity
                 FROM 
                     [topics] as t
@@ -163,26 +162,41 @@ class getDashboardData extends AbstractFunctionImplementation {
         
         $sql_tz = date_create('now', $this->tz)->format('P');
         $sql = str_replace('{{correct_timezone}}', $sql_tz, $sql);
-        
+
+        $today = date_create('today', $this->tz);
+        $today->setTimezone(new \DateTimeZone(date_default_timezone_get()));
         $day_start_unix = date_create('today', $this->tz)->getTimestamp();
-        $tickets = new DBView($sql, ['day_start_unix' => $day_start_unix]);
+        
+        $tickets = new DBView($sql, [
+            'day_start_unix' => $day_start_unix,
+            'current_date' => $today->format(DB::DATE_FORMAT)    
+        ]);
         
         $tickets_array = [];
         while ($tickets->next()) {
-            $tickets_array[] = [
+            $ticket_data = [
                 'id' => $tickets->id,
                 'type' => $tickets->type,
                 'type_emoji' => $tickets->type_emoji,
                 'title' => $tickets->title,
+                'link' => $tickets->topic_link,
                 'chat_id' => $tickets->chat_id,
                 'status' => $tickets->status,
-                'seconds_total' => $tickets->seconds_total,
-                'seconds_today' => $tickets->seconds_today,
+                'seconds_total' => 0,
+                'seconds_today' => 0,
                 'last_admin_activity' => $tickets->last_admin_activity,
                 'last_activity' => $tickets->last_activity,
                 'agents' => $this->getTicketAgentData($tickets->id),
             ];
+            
+            foreach ($ticket_data['agents'] as $agent_data) {
+                $ticket_data['seconds_total'] += $agent_data['seconds_total'] ?? 0;
+                $ticket_data['seconds_today'] += $agent_data['seconds_today'] ?? 0;
+            }
+            $tickets_array[] = $ticket_data;
         }
+        
+        
         return $tickets_array;
         
     }
