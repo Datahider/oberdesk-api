@@ -180,9 +180,86 @@ class getDashboardData extends AbstractFunctionImplementation {
                 'seconds_today' => $tickets->seconds_today,
                 'last_admin_activity' => $tickets->last_admin_activity,
                 'last_activity' => $tickets->last_activity,
+                'agents' => $this->getTicketAgentData($tickets->id),
             ];
         }
         return $tickets_array;
         
+    }
+    
+    protected function getTicketAgentData(int $ticket_id): array {
+        
+        $sql = <<<FIN
+                DROP TEMPORARY TABLE IF EXISTS vt_bound_agents;
+                
+                CREATE TEMPORARY TABLE vt_bound_agents SELECT
+                    user_id AS agent_id
+                FROM 
+                    [topic_admins]
+                WHERE
+                    topic_number = :ticket_id
+                
+                UNION
+                
+                SELECT DISTINCT
+                    subject
+                FROM 
+                    [timers] AS timers
+                    INNER JOIN [timer_events] AS events ON timers.id = events.timer
+                WHERE
+                    events.object = :ticket_id;
+                
+                SELECT
+                    bound.agent_id AS id,
+                    CASE 
+                        WHEN ta.user_id IS NULL THEN FALSE
+                        ELSE TRUE
+                    END AS bound,
+                    CASE
+                        WHEN tg_users.username IS NULL THEN NULL
+                        ELSE CONCAT('@', tg_users.username)
+                    END AS username,
+                    CASE 
+                        WHEN tg_users.last_name IS NULL THEN tg_users.first_name
+                        ELSE CONCAT(tg_users.first_name, ' ', tg_users.last_name)
+                    END AS name,
+                    SUM(DISTINCT CASE
+                        WHEN e0.started = 0 THEN e0.duration
+                        ELSE TIMESTAMPDIFF(SECOND, e0.start_time, NOW()) 
+                    END) AS seconds_total,
+                    SUM(DISTINCT CASE
+                        WHEN e1.started = 0 THEN e1.duration
+                        ELSE TIMESTAMPDIFF(SECOND, e1.start_time, NOW()) 
+                    END) AS seconds_today
+                    
+                FROM
+                    vt_bound_agents AS bound
+                    LEFT JOIN [topic_admins] AS ta ON ta.user_id = bound.agent_id AND ta.topic_number = :ticket_id
+                    INNER JOIN [telle_users] AS tg_users ON tg_users.id = bound.agent_id
+                    LEFT JOIN [timers] AS timers ON tg_users.id = timers.subject
+                    LEFT JOIN [timer_events] AS e0 ON timers.id = e0.timer AND e0.object = :ticket_id 
+                    LEFT JOIN [timer_events] AS e1 ON timers.id = e1.timer AND e1.object = :ticket_id AND e1.start_time >= :current_date
+                
+                GROUP BY
+                    id, bound, username, name
+                ;
+
+                DROP TEMPORARY TABLE vt_bound_agents;
+                
+                FIN;
+        
+        $today = date_create('today', $this->tz);
+        $today->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+
+        $sth = DB::prepare($sql);
+        $sth->execute([
+            'ticket_id' => $ticket_id,
+            'current_date' => $today->format(DB::DATE_FORMAT)    
+        ]);
+        
+        $sth->nextRowset();
+        $sth->nextRowset();
+        
+        return $sth->fetchAll(\PDO::FETCH_ASSOC);
     }
 }
