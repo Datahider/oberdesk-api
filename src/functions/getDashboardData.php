@@ -146,7 +146,8 @@ class getDashboardData extends AbstractFunctionImplementation {
                     CASE
                         WHEN t.last_activity = 0 THEN NULL
                         ELSE DATE_FORMAT(CONVERT_TZ(DATE_ADD('1970-01-01 00:00:00', INTERVAL t.last_activity SECOND), '+00:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s') 
-                    END AS last_activity
+                    END AS last_activity,
+                    DATE_FORMAT(t.created, '%Y-%m-%d %H:%i:%s') AS created
                 FROM 
                     [topics] as t
                 WHERE 
@@ -189,6 +190,7 @@ class getDashboardData extends AbstractFunctionImplementation {
                 'seconds_today' => 0,
                 'last_admin_activity' => $tickets->last_admin_activity,
                 'last_activity' => $tickets->last_activity,
+                'created' => $tickets->created,
                 'agents' => $this->getTicketAgentData($tickets->id),
             ];
             
