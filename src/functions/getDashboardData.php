@@ -147,7 +147,7 @@ class getDashboardData extends AbstractFunctionImplementation {
                         WHEN t.last_activity = 0 THEN NULL
                         ELSE DATE_FORMAT(CONVERT_TZ(DATE_ADD('1970-01-01 00:00:00', INTERVAL t.last_activity SECOND), '+00:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s') 
                     END AS last_activity,
-                    DATE_FORMAT(t.created, '%Y-%m-%d %H:%i:%s') AS created
+                    DATE_FORMAT(CONVERT_TZ(t.created, '+03:00', '{{correct_timezone}}'), '%Y-%m-%d %H:%i:%s') AS created
                 FROM 
                     [topics] as t
                 WHERE 
