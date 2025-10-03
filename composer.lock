@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1c6e733413d60d31d8399f77add739b9",
+    "content-hash": "bbb54b6f67b9326338958c826bfd065d",
     "packages": [
         {
             "name": "losthost/db",
-            "version": "dev-master",
+            "version": "3.0.13-beta",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Datahider/DB.git",
-                "reference": "5fcb4ce4740e540270b3f5852eebe02eda558425"
+                "reference": "21115910ca803cedc6b9d79fa6f732f2ae5892f8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Datahider/DB/zipball/5fcb4ce4740e540270b3f5852eebe02eda558425",
-                "reference": "5fcb4ce4740e540270b3f5852eebe02eda558425",
+                "url": "https://api.github.com/repos/Datahider/DB/zipball/21115910ca803cedc6b9d79fa6f732f2ae5892f8",
+                "reference": "21115910ca803cedc6b9d79fa6f732f2ae5892f8",
                 "shasum": ""
             },
             "require": {
@@ -53,17 +53,96 @@
             ],
             "support": {
                 "issues": "https://github.com/Datahider/DB/issues",
-                "source": "https://github.com/Datahider/DB/tree/master"
+                "source": "https://github.com/Datahider/DB/tree/3.0.13-beta"
             },
-            "time": "2023-11-20T18:35:25+00:00"
+            "time": "2024-11-16T04:12:38+00:00"
+        },
+        {
+            "name": "losthost/oberbot-model",
+            "version": "2.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Datahider/oberbot-model.git",
+                "reference": "cc4bd9f55247d92770c808fbe641ea73a8fab157"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Datahider/oberbot-model/zipball/cc4bd9f55247d92770c808fbe641ea73a8fab157",
+                "reference": "cc4bd9f55247d92770c808fbe641ea73a8fab157",
+                "shasum": ""
+            },
+            "require": {
+                "losthost/db": "^3"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "10.5.10"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "losthost\\OberbotModel\\": "src/",
+                    "losthost\\OberbotModel\\Test\\": "test/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "authors": [
+                {
+                    "name": "Petros Ioannidis",
+                    "email": "pio@pio.su"
+                }
+            ],
+            "description": "Description of project Oberbot-Model.",
+            "support": {
+                "issues": "https://github.com/Datahider/oberbot-model/issues",
+                "source": "https://github.com/Datahider/oberbot-model/tree/2.0.0"
+            },
+            "time": "2025-09-26T08:28:25+00:00"
+        },
+        {
+            "name": "losthost/time-tracker",
+            "version": "v1.1.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Datahider/time-tracker.git",
+                "reference": "ea537342c2697940967f0f31fc47feb1108b7348"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Datahider/time-tracker/zipball/ea537342c2697940967f0f31fc47feb1108b7348",
+                "reference": "ea537342c2697940967f0f31fc47feb1108b7348",
+                "shasum": ""
+            },
+            "require": {
+                "losthost/db": "^3"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^10"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "losthost\\timetracker\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "authors": [
+                {
+                    "name": "drweb",
+                    "email": "pio@pio.su"
+                }
+            ],
+            "description": "Description of project time-tracker.",
+            "support": {
+                "issues": "https://github.com/Datahider/time-tracker/issues",
+                "source": "https://github.com/Datahider/time-tracker/tree/v1.1.2"
+            },
+            "time": "2024-12-24T14:51:18+00:00"
         }
     ],
     "packages-dev": [],
     "aliases": [],
-    "minimum-stability": "stable",
-    "stability-flags": {
-        "losthost/db": 20
-    },
+    "minimum-stability": "dev",
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": [],

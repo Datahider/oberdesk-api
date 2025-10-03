@@ -1,13 +1,15 @@
 <?php
 
-namespace losthost\OberdeskAPI\functions;
+namespace losthost\OberdeskAPI\functions\get;
 
 use losthost\DB\DB;
 use losthost\DB\DBView;
+use losthost\DB\DBValue;
+use losthost\OberdeskAPI\functions\AbstractFunctionImplementation;
 
 class getDashboardData extends AbstractFunctionImplementation {
     
-    protected \DateTimeZone $tz;
+    protected \DateTimeZone $tz; 
     
     public function run(array $params): array {
     
@@ -74,7 +76,11 @@ class getDashboardData extends AbstractFunctionImplementation {
                 SUM(CASE
                     WHEN events.started = 0 THEN events.duration
                     ELSE TIMESTAMPDIFF(SECOND, events.start_time, NOW()) 
-                END) AS total_seconds_today
+                END) AS total_seconds_today,
+                SUM(CASE
+                    WHEN events.comment = 'No AcTiViTy' THEN 1
+                    ELSE 0
+                END) AS stopped_by_no_activity
             FROM 
                 [user_chat_role] AS roles
                 INNER JOIN [telle_users] AS tg_users 
@@ -109,10 +115,31 @@ class getDashboardData extends AbstractFunctionImplementation {
                 'username' => $agents->username,
                 'name' => $agents->name,
                 'current_task_id' => $agents->current_task_id,
-                'total_seconds_today' => $agents->total_seconds_today
+                'total_seconds_today' => $agents->total_seconds_today,
+                'sbna_today' => $agents->stopped_by_no_activity,
+                'sbna_month' => $this->getStoppedByNoActivityMonth($agents->id, $today),
             ];
         }
         return $agents_array;
+    }
+    
+    protected function getStoppedByNoActivityMonth($agent_id, \DateTime $today) {
+        
+        $sql = <<<FIN
+                SELECT
+                    COUNT(e.comment) AS total
+                FROM 
+                    [timer_events] AS e
+                    INNER JOIN [timers] AS t ON e.timer = t.id
+                WHERE
+                    t.subject = :agent_id
+                    AND e.end_time >= :month_start
+                    AND e.comment = "No AcTiViTy"
+                FIN;
+    
+        $value = new DBValue($sql, ['agent_id' => $agent_id, 'month_start' => $today->modify('first day of this month')->setTime(0, 0, 0)->format(DB::DATE_FORMAT)]);
+
+        return $value->total;
     }
 
     protected function getTickets(array $params): array {

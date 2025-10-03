@@ -1,6 +1,7 @@
 {
     "name": "losthost/oberdesk-api",
     "description": "Description of project Oberdesk API.",
+    "minimum-stability": "dev",
     "authors": [
         {
             "name": "Petros Ioannidis",
@@ -8,7 +9,9 @@
         }
     ],
     "require": {
-        "losthost/db": "dev-master"
+        "losthost/db": "^3",
+        "losthost/oberbot-model": "2.0.0",
+        "losthost/time-tracker": "^v1"
     },
     "autoload": {
         "psr-4": {

@@ -2,37 +2,20 @@
 
 use losthost\OberdeskAPI\functions\AbstractFunctionImplementation;
 use losthost\OberdeskAPI\functions\getDashboardData;
+use losthost\OberdeskAPI\input\AbstractInput;
 
 require '../vendor/autoload.php';
 require '../etc/db.php';
 
-$params = [];
-foreach ($_GET as $key=>$value) {
-    if (is_array($_GET[$key])) {
-        $params[$key] = filter_input(INPUT_GET, $key, FILTER_DEFAULT, FILTER_REQUIRE_ARRAY);
-    } else {
-        $params[$key] = filter_input(INPUT_GET, $key);
-    }
-}
+$method = ($_SERVER['REQUEST_METHOD']);
 
-if (isset($params['function'])) {
-    $function = $params['function'];
-    unset($params['function']);
-} else {
-    throw new \Exception('Не передано имя функции');
-}
+$method_handler_class = 'losthost\\OberdeskAPI\\input\\Input'. $method;
 
-if (is_a('losthost\\OberdeskAPI\\functions\\'. $function, AbstractFunctionImplementation::class, true)) {
-    $handler = new ('losthost\\OberdeskAPI\\functions\\'. $function)();
-    if (!is_a($handler, AbstractFunctionImplementation::class)) {
-        throw new \Exception('Не верная функция '. $function);
-    }
-    $handler->checkParams($params);
-    $result = $handler->run($params);
-    
-    header('Content-Type: application/json; charset=utf-8');
-
+if (is_a($method_handler_class, AbstractInput::class, true)) {
+    $method_handler = new $method_handler_class();
+    $result = $method_handler->process();
     echo json_encode($result);
 } else {
-    throw new \Exception('Не верная функция '. $function);
+    throw new \Exception('Не верный метод '. $method);
 }
+
