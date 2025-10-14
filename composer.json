@@ -11,7 +11,8 @@
     "require": {
         "losthost/db": "^3",
         "losthost/oberbot-model": "2.0.0",
-        "losthost/time-tracker": "^v1"
+        "losthost/time-tracker": "^v1",
+        "losthost/oberbot": "0.0.124"
     },
     "autoload": {
         "psr-4": {

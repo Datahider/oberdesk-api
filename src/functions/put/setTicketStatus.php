@@ -3,7 +3,7 @@
 namespace losthost\OberdeskAPI\functions\put;
 
 use losthost\OberdeskAPI\functions\AbstractFunctionImplementation;
-use losthost\OberbotModel\data\ticket;
+use losthost\Oberbot\data\ticket;
 
 class setTicketStatus extends AbstractFunctionImplementation {
     
