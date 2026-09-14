@@ -10,4 +10,4 @@
 - Зависимости `vendor` устанавливаются Composer и никогда не входят в Git.
 - Работа с MariaDB выполняется через `losthost/db`.
 - Запросы через `DB::prepare()` без согласования запрещены.
-
+- Деплой выполняется через GitHub tag/release и production-скрипт `update-api.sh VERSION` от пользователя `oberdesk-api`.
