@@ -6,6 +6,7 @@ namespace losthost\OberdeskAPIv1\Controller;
 
 use Closure;
 use DateTimeImmutable;
+use DateTimeZone;
 use Exception;
 use InvalidArgumentException;
 use losthost\DB\DBView;
@@ -60,12 +61,14 @@ final class PacerTimeEntriesController
                 throw new RuntimeException('Time entry dates must be DateTimeImmutable');
             }
 
+            $started_at = $this->asMoscowWallTime($entry['started_at']);
+            $ended_at = $this->asMoscowWallTime($entry['ended_at']);
             $entries[] = [
                 'id' => (int) $entry['id'],
                 'task_id' => (string) $entry['task_id'],
                 'task_type' => (int) $entry['task_type'],
-                'started_at' => $entry['started_at']->format(DATE_ATOM),
-                'ended_at' => $entry['ended_at']->format(DATE_ATOM),
+                'started_at' => $started_at->format(DATE_ATOM),
+                'ended_at' => $ended_at->format(DATE_ATOM),
                 'duration_seconds' => (int) $entry['duration_seconds'],
                 'is_running' => (bool) $entry['is_running'],
             ];
@@ -90,6 +93,11 @@ final class PacerTimeEntriesController
         }
 
         return $date;
+    }
+
+    private function asMoscowWallTime(DateTimeImmutable $date): DateTimeImmutable
+    {
+        return new DateTimeImmutable($date->format('Y-m-d H:i:s'), new DateTimeZone('Europe/Moscow'));
     }
 
     private function loadFromDatabase(

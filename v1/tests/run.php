@@ -31,8 +31,8 @@ $loader = static function (int $timer_id, string $project_group, DateTimeImmutab
             'id' => 10,
             'task_id' => '501',
             'task_type' => 2,
-            'started_at' => new DateTimeImmutable('2026-09-02T10:00:00+03:00'),
-            'ended_at' => new DateTimeImmutable('2026-09-02T11:30:00+03:00'),
+            'started_at' => new DateTimeImmutable('2026-09-02T10:00:00+00:00'),
+            'ended_at' => new DateTimeImmutable('2026-09-02T11:30:00+00:00'),
             'duration_seconds' => 5400,
             'is_running' => false,
         ],
@@ -44,7 +44,8 @@ $result = $controller->handle('1', 'comm', '2026-09-01T00:00:00+03:00', '2026-10
 assertSameValue(true, $result['ok'], 'Response is successful');
 assertSameValue(1, count($result['entries']), 'Response contains entries');
 assertSameValue(2, $result['entries'][0]['task_type'], 'Task type is preserved');
-assertSameValue('2026-09-02T10:00:00+03:00', $result['entries'][0]['started_at'], 'Start uses ISO-8601');
+assertSameValue('2026-09-02T10:00:00+03:00', $result['entries'][0]['started_at'], 'Database wall time is interpreted as Moscow time');
+assertSameValue('2026-09-02T11:30:00+03:00', $result['entries'][0]['ended_at'], 'End uses Moscow time');
 assertSameValue(5400, $result['entries'][0]['duration_seconds'], 'Duration uses seconds');
 assertSameValue([[1, 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00']], $loader_calls, 'Filters and period are passed to loader');
 
