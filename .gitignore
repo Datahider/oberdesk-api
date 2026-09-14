@@ -1,3 +1,5 @@
 /vendor/
 /etc/
 /nbproject/
+/v1/vendor/
+/v1/etc/config.php

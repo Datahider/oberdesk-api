@@ -1,0 +1,17 @@
+{
+  "name": "losthost/oberdesk-api-v1",
+  "description": "Oberdesk API v1",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "losthost/db": "^3",
+    "losthost/oberbot": "dev-master"
+  },
+  "autoload": {
+    "psr-4": {
+      "losthost\\OberdeskAPIv1\\": "src/"
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
