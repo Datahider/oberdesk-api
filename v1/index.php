@@ -7,6 +7,7 @@ use losthost\OberdeskAPIv1\Controller\MeController;
 use losthost\OberdeskAPIv1\Controller\GroupsController;
 use losthost\OberdeskAPIv1\Controller\ThreadController;
 use losthost\OberdeskAPIv1\Controller\ThreadMessagesController;
+use losthost\OberdeskAPIv1\Controller\PacerTimeEntriesController;
 
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/etc/config.php';
@@ -51,6 +52,7 @@ $routes = [
     ['GET', '#^/group/([^/]+)/threads$#', GroupThreadsController::class, 'handle'],
     ['GET', '#^/thread/([^/]+)$#', ThreadController::class, 'handle'],
     ['GET', '#^/thread/([^/]+)/messages$#', ThreadMessagesController::class, 'handle'],
+    ['GET', '#^/pacer/time-entries$#', PacerTimeEntriesController::class, 'handle'],
 ];
 
 $method = $_SERVER['REQUEST_METHOD'];
