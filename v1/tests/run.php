@@ -24,8 +24,8 @@ function assertThrows(callable $callback, string $message): void
 }
 
 $loader_calls = [];
-$loader = static function (DateTimeImmutable $from, DateTimeImmutable $to) use (&$loader_calls): array {
-    $loader_calls[] = [$from->format(DATE_ATOM), $to->format(DATE_ATOM)];
+$loader = static function (int $timer_id, string $project_group, DateTimeImmutable $from, DateTimeImmutable $to) use (&$loader_calls): array {
+    $loader_calls[] = [$timer_id, $project_group, $from->format(DATE_ATOM), $to->format(DATE_ATOM)];
     return [
         [
             'id' => 10,
@@ -40,17 +40,19 @@ $loader = static function (DateTimeImmutable $from, DateTimeImmutable $to) use (
 };
 
 $controller = new PacerTimeEntriesController($loader);
-$result = $controller->handle('2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00');
+$result = $controller->handle('1', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00');
 assertSameValue(true, $result['ok'], 'Response is successful');
 assertSameValue(1, count($result['entries']), 'Response contains entries');
 assertSameValue(2, $result['entries'][0]['task_type'], 'Task type is preserved');
 assertSameValue('2026-09-02T10:00:00+03:00', $result['entries'][0]['started_at'], 'Start uses ISO-8601');
 assertSameValue(5400, $result['entries'][0]['duration_seconds'], 'Duration uses seconds');
-assertSameValue([['2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00']], $loader_calls, 'Period is passed to loader');
+assertSameValue([[1, 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00']], $loader_calls, 'Filters and period are passed to loader');
 
-assertThrows(static fn () => $controller->handle('', '2026-10-01T00:00:00+03:00'), 'From is required');
-assertThrows(static fn () => $controller->handle('invalid', '2026-10-01T00:00:00+03:00'), 'From must be ISO-8601');
-assertThrows(static fn () => $controller->handle('2026-10-01T00:00:00+03:00', '2026-09-01T00:00:00+03:00'), 'To must follow from');
+assertThrows(static fn () => $controller->handle('', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Timer id is required');
+assertThrows(static fn () => $controller->handle('0', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Timer id must be positive');
+assertThrows(static fn () => $controller->handle('1', '', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Project group is required');
+assertThrows(static fn () => $controller->handle('1', 'comm', 'invalid', '2026-10-01T00:00:00+03:00'), 'From must be ISO-8601');
+assertThrows(static fn () => $controller->handle('1', 'comm', '2026-10-01T00:00:00+03:00', '2026-09-01T00:00:00+03:00'), 'To must follow from');
 
 $index = file_get_contents(dirname(__DIR__) . '/index.php');
 assertSameValue(true, str_contains($index, "#^/pacer/time-entries$#"), 'Router exposes pacer endpoint');

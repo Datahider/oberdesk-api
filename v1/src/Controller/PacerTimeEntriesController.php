@@ -22,8 +22,21 @@ final class PacerTimeEntriesController
             : Closure::fromCallable($loader);
     }
 
-    public function handle(?string $from = null, ?string $to = null): array
+    public function handle(
+        ?string $timer_id = null,
+        ?string $project_group = null,
+        ?string $from = null,
+        ?string $to = null,
+    ): array
     {
+        $timer_id = $timer_id ?? ($_GET['timer_id'] ?? null);
+        if (!is_string($timer_id) || filter_var($timer_id, FILTER_VALIDATE_INT) === false || (int) $timer_id <= 0) {
+            throw new InvalidArgumentException('timer_id must be a positive integer');
+        }
+        $project_group = $project_group ?? ($_GET['project_group'] ?? null);
+        if (!is_string($project_group) || $project_group === '' || strlen($project_group) > 100) {
+            throw new InvalidArgumentException('project_group is required and must not exceed 100 bytes');
+        }
         $from_date = $this->parseDate($from ?? ($_GET['from'] ?? null), 'from');
         $to_date = $this->parseDate($to ?? ($_GET['to'] ?? null), 'to');
         if ($to_date <= $from_date) {
@@ -31,7 +44,7 @@ final class PacerTimeEntriesController
         }
 
         $entries = [];
-        foreach (($this->loader)($from_date, $to_date) as $entry) {
+        foreach (($this->loader)((int) $timer_id, $project_group, $from_date, $to_date) as $entry) {
             if (!isset(
                 $entry['id'],
                 $entry['task_id'],
@@ -79,7 +92,12 @@ final class PacerTimeEntriesController
         return $date;
     }
 
-    private function loadFromDatabase(DateTimeImmutable $from, DateTimeImmutable $to): array
+    private function loadFromDatabase(
+        int $timer_id,
+        string $project_group,
+        DateTimeImmutable $from,
+        DateTimeImmutable $to,
+    ): array
     {
         $sql = <<<'SQL'
             SELECT
@@ -96,19 +114,19 @@ final class PacerTimeEntriesController
             FROM [timer_events] AS events
             INNER JOIN [topics] AS topics
                 ON topics.id = events.object
-            WHERE events.timer = 1
+            WHERE events.timer = ?
                 AND events.start_time >= ?
                 AND events.start_time < ?
                 AND EXISTS (
                     SELECT 1
                     FROM [chat_groups] AS groups
                     WHERE groups.chat_id = CAST(events.project AS SIGNED)
-                        AND groups.chat_group = 'comm'
+                        AND groups.chat_group = ?
                 )
             ORDER BY events.start_time, events.id
             SQL;
 
-        $view = new DBView($sql, [$from, $to]);
+        $view = new DBView($sql, [$timer_id, $from, $to, $project_group]);
         $entries = [];
         while ($view->next()) {
             if ($view->task_type === null) {
@@ -128,4 +146,3 @@ final class PacerTimeEntriesController
         return $entries;
     }
 }
-
