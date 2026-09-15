@@ -39,18 +39,24 @@ $loader = static function (int $timer_id, string $project_group, DateTimeImmutab
     ];
 };
 
-$controller = new PacerTimeEntriesController($loader);
-$result = $controller->handle('1', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00');
+$resolver_calls = [];
+$resolver = static function (int $subject) use (&$resolver_calls): int {
+    $resolver_calls[] = $subject;
+    return 17;
+};
+$controller = new PacerTimeEntriesController($loader, $resolver);
+$result = $controller->handle('203645978', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00');
 assertSameValue(true, $result['ok'], 'Response is successful');
 assertSameValue(1, count($result['entries']), 'Response contains entries');
 assertSameValue(2, $result['entries'][0]['task_type'], 'Task type is preserved');
 assertSameValue('2026-09-02T10:00:00+03:00', $result['entries'][0]['started_at'], 'Database wall time is interpreted as Moscow time');
 assertSameValue('2026-09-02T11:30:00+03:00', $result['entries'][0]['ended_at'], 'End uses Moscow time');
 assertSameValue(5400, $result['entries'][0]['duration_seconds'], 'Duration uses seconds');
-assertSameValue([[1, 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00']], $loader_calls, 'Filters and period are passed to loader');
+assertSameValue([203645978], $resolver_calls, 'Authenticated subject is passed to timer resolver');
+assertSameValue([[17, 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00']], $loader_calls, 'Resolved timer, filters and period are passed to loader');
 
-assertThrows(static fn () => $controller->handle('', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Timer id is required');
-assertThrows(static fn () => $controller->handle('0', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Timer id must be positive');
+assertThrows(static fn () => $controller->handle('', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Subject is required');
+assertThrows(static fn () => $controller->handle('0', 'comm', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Subject must be positive');
 assertThrows(static fn () => $controller->handle('1', '', '2026-09-01T00:00:00+03:00', '2026-10-01T00:00:00+03:00'), 'Project group is required');
 assertThrows(static fn () => $controller->handle('1', 'comm', 'invalid', '2026-10-01T00:00:00+03:00'), 'From must be ISO-8601');
 assertThrows(static fn () => $controller->handle('1', 'comm', '2026-10-01T00:00:00+03:00', '2026-09-01T00:00:00+03:00'), 'To must follow from');

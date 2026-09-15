@@ -15,24 +15,28 @@ use RuntimeException;
 final class PacerTimeEntriesController
 {
     private readonly Closure $loader;
+    private readonly Closure $timer_resolver;
 
-    public function __construct(?callable $loader = null)
+    public function __construct(?callable $loader = null, ?callable $timer_resolver = null)
     {
         $this->loader = $loader === null
             ? $this->loadFromDatabase(...)
             : Closure::fromCallable($loader);
+        $this->timer_resolver = $timer_resolver === null
+            ? $this->resolveTimerId(...)
+            : Closure::fromCallable($timer_resolver);
     }
 
     public function handle(
-        ?string $timer_id = null,
+        ?string $subject = null,
         ?string $project_group = null,
         ?string $from = null,
         ?string $to = null,
     ): array
     {
-        $timer_id = $timer_id ?? ($_GET['timer_id'] ?? null);
-        if (!is_string($timer_id) || filter_var($timer_id, FILTER_VALIDATE_INT) === false || (int) $timer_id <= 0) {
-            throw new InvalidArgumentException('timer_id must be a positive integer');
+        $subject = $subject ?? ($_GET['subject'] ?? null);
+        if (!is_string($subject) || filter_var($subject, FILTER_VALIDATE_INT) === false || (int) $subject <= 0) {
+            throw new InvalidArgumentException('subject must be a positive integer');
         }
         $project_group = $project_group ?? ($_GET['project_group'] ?? null);
         if (!is_string($project_group) || $project_group === '' || strlen($project_group) > 100) {
@@ -45,7 +49,8 @@ final class PacerTimeEntriesController
         }
 
         $entries = [];
-        foreach (($this->loader)((int) $timer_id, $project_group, $from_date, $to_date) as $entry) {
+        $timer_id = ($this->timer_resolver)((int) $subject);
+        foreach (($this->loader)($timer_id, $project_group, $from_date, $to_date) as $entry) {
             if (!isset(
                 $entry['id'],
                 $entry['task_id'],
@@ -75,6 +80,22 @@ final class PacerTimeEntriesController
         }
 
         return ['ok' => true, 'entries' => $entries];
+    }
+
+    private function resolveTimerId(int $subject): int
+    {
+        $view = new DBView(
+            'SELECT timers.id FROM [timers] AS timers WHERE timers.subject = ? ORDER BY timers.id',
+            [$subject],
+        );
+        if (!$view->next()) {
+            throw new RuntimeException("Timer not found for subject {$subject}");
+        }
+        $timer_id = (int) $view->id;
+        if ($view->next()) {
+            throw new RuntimeException("Multiple timers found for subject {$subject}");
+        }
+        return $timer_id;
     }
 
     private function parseDate(mixed $value, string $name): DateTimeImmutable
