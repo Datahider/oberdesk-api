@@ -29,7 +29,7 @@ final class PacerTimeEntriesController
 
     public function handle(
         ?string $subject = null,
-        ?string $project_group = null,
+        ?array $project_groups = null,
         ?string $from = null,
         ?string $to = null,
     ): array
@@ -38,9 +38,17 @@ final class PacerTimeEntriesController
         if (!is_string($subject) || filter_var($subject, FILTER_VALIDATE_INT) === false || (int) $subject <= 0) {
             throw new InvalidArgumentException('subject must be a positive integer');
         }
-        $project_group = $project_group ?? ($_GET['project_group'] ?? null);
-        if (!is_string($project_group) || $project_group === '' || strlen($project_group) > 100) {
-            throw new InvalidArgumentException('project_group is required and must not exceed 100 bytes');
+        $project_groups = $project_groups ?? ($_GET['project_groups'] ?? null);
+        if (!is_array($project_groups) || $project_groups === [] || count($project_groups) > 50) {
+            throw new InvalidArgumentException('project_groups must be a non-empty array with at most 50 values');
+        }
+        foreach ($project_groups as $project_group) {
+            if (!is_string($project_group) || $project_group === '' || strlen($project_group) > 100) {
+                throw new InvalidArgumentException('Each project group must be a non-empty string up to 100 bytes');
+            }
+        }
+        if (count(array_unique($project_groups)) !== count($project_groups)) {
+            throw new InvalidArgumentException('project_groups must be unique');
         }
         $from_date = $this->parseDate($from ?? ($_GET['from'] ?? null), 'from');
         $to_date = $this->parseDate($to ?? ($_GET['to'] ?? null), 'to');
@@ -50,7 +58,7 @@ final class PacerTimeEntriesController
 
         $entries = [];
         $timer_id = ($this->timer_resolver)((int) $subject);
-        foreach (($this->loader)($timer_id, $project_group, $from_date, $to_date) as $entry) {
+        foreach (($this->loader)($timer_id, array_values($project_groups), $from_date, $to_date) as $entry) {
             if (!isset(
                 $entry['id'],
                 $entry['task_id'],
@@ -123,12 +131,13 @@ final class PacerTimeEntriesController
 
     private function loadFromDatabase(
         int $timer_id,
-        string $project_group,
+        array $project_groups,
         DateTimeImmutable $from,
         DateTimeImmutable $to,
     ): array
     {
-        $sql = <<<'SQL'
+        $placeholders = implode(', ', array_fill(0, count($project_groups), '?'));
+        $sql = <<<SQL
             SELECT
                 events.id,
                 events.object AS task_id,
@@ -150,12 +159,12 @@ final class PacerTimeEntriesController
                     SELECT 1
                     FROM [chat_groups] AS groups
                     WHERE groups.chat_id = CAST(events.project AS SIGNED)
-                        AND groups.chat_group = ?
+                        AND groups.chat_group IN ({$placeholders})
                 )
             ORDER BY events.start_time, events.id
             SQL;
 
-        $view = new DBView($sql, [$timer_id, $from, $to, $project_group]);
+        $view = new DBView($sql, [$timer_id, $from, $to, ...$project_groups]);
         $entries = [];
         while ($view->next()) {
             if ($view->task_type === null) {
