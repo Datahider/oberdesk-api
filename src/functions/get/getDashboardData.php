@@ -2,17 +2,37 @@
 
 namespace losthost\OberdeskAPI\functions\get;
 
-use losthost\DB\DB;
 use losthost\DB\DBView;
-use losthost\DB\DBValue;
 use losthost\OberdeskAPI\functions\AbstractFunctionImplementation;
+use RuntimeException;
 
 class getDashboardData extends AbstractFunctionImplementation {
     
     protected \DateTimeZone $tz; 
     
     public function run(array $params): array {
-    
+        $agents = $this->loadAgents($params);
+        $tickets = $this->loadTickets($params);
+        $ticket_indexes = [];
+        foreach ($tickets as $ticket_index => $ticket) {
+            $tickets[$ticket_index]['seconds_total'] = 0;
+            $tickets[$ticket_index]['seconds_today'] = 0;
+            $tickets[$ticket_index]['agents'] = [];
+            $ticket_indexes[(string) $ticket['id']] = $ticket_index;
+        }
+
+        foreach ($this->loadTicketAgents($params) as $agent) {
+            $ticket_id = (string) $agent['ticket_id'];
+            if (!array_key_exists($ticket_id, $ticket_indexes)) {
+                throw new RuntimeException("Agent data returned for unknown ticket {$ticket_id}");
+            }
+            $ticket_index = $ticket_indexes[$ticket_id];
+            unset($agent['ticket_id']);
+            $tickets[$ticket_index]['seconds_total'] += $agent['seconds_total'] ?? 0;
+            $tickets[$ticket_index]['seconds_today'] += $agent['seconds_today'] ?? 0;
+            $tickets[$ticket_index]['agents'][] = $agent;
+        }
+
         $result = [
             'params' => $params,
             'statuses' => [
@@ -25,8 +45,8 @@ class getDashboardData extends AbstractFunctionImplementation {
                 111 => 'Закрыт',
                 120 => 'Архивный',
             ],
-            'agents' => $this->getAgents($params),
-            'tickets' => $this->getTickets($params),
+            'agents' => $agents,
+            'tickets' => $tickets,
         ];
         return $result;
     }
@@ -59,19 +79,8 @@ class getDashboardData extends AbstractFunctionImplementation {
     }
 
 
-    protected function getAgents(array $params): array {
-     
+    protected function loadAgents(array $params): array {
         $sql = <<<FIN
-            DROP TEMPORARY TABLE IF EXISTS vt_agents;
-                
-            CREATE TEMPORARY TABLE vt_agents SELECT DISTINCT
-                    user_id AS agent_id
-            FROM 
-                sprt_user_chat_role AS roles
-            WHERE
-                chat_id IN ({{groups}})
-                AND roles.role = 'agent';
-                
             SELECT 
                 agents.agent_id AS id,
                 CASE
@@ -90,9 +99,15 @@ class getDashboardData extends AbstractFunctionImplementation {
                 SUM(CASE
                     WHEN events.comment = 'No AcTiViTy' THEN 1
                     ELSE 0
-                END) AS sbna_today
+                END) AS sbna_today,
+                COALESCE(monthly_sbna.total, 0) AS sbna_month
             FROM 
-                vt_agents AS agents
+                (
+                    SELECT DISTINCT user_id AS agent_id
+                    FROM sprt_user_chat_role
+                    WHERE chat_id IN ({{groups}})
+                        AND role = 'agent'
+                ) AS agents
                 INNER JOIN [telle_users] AS tg_users 
                     ON tg_users.id = agents.agent_id
                 LEFT JOIN [timers] AS timers
@@ -101,53 +116,46 @@ class getDashboardData extends AbstractFunctionImplementation {
                     ON timers.id = events.timer AND events.start_time >= :current_date
                 LEFT JOIN [timer_events] AS e2
                     ON timers.id = e2.timer AND e2.started = 1
+                LEFT JOIN (
+                    SELECT monthly_timers.subject, COUNT(monthly_events.comment) AS total
+                    FROM [timers] AS monthly_timers
+                    INNER JOIN [timer_events] AS monthly_events
+                        ON monthly_events.timer = monthly_timers.id
+                    WHERE monthly_events.end_time >= :month_start
+                        AND monthly_events.comment = 'No AcTiViTy'
+                    GROUP BY monthly_timers.subject
+                ) AS monthly_sbna
+                    ON monthly_sbna.subject = agents.agent_id
             GROUP BY
-                id, username, name, current_task_id;
-
-            DROP TEMPORARY TABLE IF EXISTS vt_agents;
+                id, username, name, current_task_id, monthly_sbna.total
             FIN;
         
-        $sql_groups = [];
-        foreach ($params['groups'] as $value) {
-            $sql_groups[] = (int)$value;
-        }
+        $sql_groups = $this->normalizeGroups($params);
         $sql = str_replace('{{groups}}', implode(',', $sql_groups), $sql);
         
         $today = date_create('today', $this->tz);
         $today->setTimezone(new \DateTimeZone(date_default_timezone_get()));
         
-        $sth = DB::prepare($sql);
-        $sth->execute(['current_date' => $today->format(DB::DATE_FORMAT)]);
-        $sth->nextRowset();
-        $sth->nextRowset();
-        $agents_array = $sth->fetchAll(\PDO::FETCH_ASSOC);
-                
-        foreach($agents_array as $key => $agent) {
-            $agents_array[$key]['sbna_month'] = $this->getStoppedByNoActivityMonth($agent['id'], $today);
+        $agents = new DBView($sql, [
+            'current_date' => $today->format('Y-m-d H:i:s'),
+            'month_start' => $today->modify('first day of this month')->setTime(0, 0, 0)->format('Y-m-d H:i:s'),
+        ]);
+        $result = [];
+        while ($agents->next()) {
+            $result[] = [
+                'id' => $agents->id,
+                'username' => $agents->username,
+                'name' => $agents->name,
+                'current_task_id' => $agents->current_task_id,
+                'total_seconds_today' => $agents->total_seconds_today,
+                'sbna_today' => $agents->sbna_today,
+                'sbna_month' => $agents->sbna_month,
+            ];
         }
-        return $agents_array;
-    }
-    
-    protected function getStoppedByNoActivityMonth($agent_id, \DateTime $today) {
-        
-        $sql = <<<FIN
-                SELECT
-                    COUNT(e.comment) AS total
-                FROM 
-                    [timer_events] AS e
-                    INNER JOIN [timers] AS t ON e.timer = t.id
-                WHERE
-                    t.subject = :agent_id
-                    AND e.end_time >= :month_start
-                    AND e.comment = "No AcTiViTy"
-                FIN;
-    
-        $value = new DBValue($sql, ['agent_id' => $agent_id, 'month_start' => $today->modify('first day of this month')->setTime(0, 0, 0)->format(DB::DATE_FORMAT)]);
-
-        return $value->total;
+        return $result;
     }
 
-    protected function getTickets(array $params): array {
+    protected function loadTickets(array $params): array {
         $sql = <<<FIN
                 SELECT 
                     t.id,
@@ -187,27 +195,21 @@ class getDashboardData extends AbstractFunctionImplementation {
                     )
                 FIN;
 
-        $sql_groups = [];
-        foreach ($params['groups'] as $value) {
-            $sql_groups[] = (int)$value;
-        }
+        $sql_groups = $this->normalizeGroups($params);
         $sql = str_replace('{{groups}}', implode(',', $sql_groups), $sql);
         
         $sql_tz = date_create('now', $this->tz)->format('P');
         $sql = str_replace('{{correct_timezone}}', $sql_tz, $sql);
         
-        $today = date_create('today', $this->tz);
-        $today->setTimezone(new \DateTimeZone(date_default_timezone_get()));
         $day_start_unix = date_create('today', $this->tz)->getTimestamp();
         
         $tickets = new DBView($sql, [
             'day_start_unix' => $day_start_unix,
-            'current_date' => $today->format(DB::DATE_FORMAT)    
         ]);
         
-        $tickets_array = [];
+        $result = [];
         while ($tickets->next()) {
-            $ticket_data = [
+            $result[] = [
                 'id' => $tickets->id,
                 'type' => $tickets->type,
                 'type_emoji' => $tickets->type_emoji,
@@ -215,49 +217,18 @@ class getDashboardData extends AbstractFunctionImplementation {
                 'link' => $tickets->topic_link,
                 'chat_id' => $tickets->chat_id,
                 'status' => $tickets->status,
-                'seconds_total' => 0,
-                'seconds_today' => 0,
                 'last_admin_activity' => $tickets->last_admin_activity,
                 'last_activity' => $tickets->last_activity,
                 'created' => $tickets->created,
-                'agents' => $this->getTicketAgentData($tickets->id),
             ];
-            
-            foreach ($ticket_data['agents'] as $agent_data) {
-                $ticket_data['seconds_total'] += $agent_data['seconds_total'] ?? 0;
-                $ticket_data['seconds_today'] += $agent_data['seconds_today'] ?? 0;
         }
-            $tickets_array[] = $ticket_data;
-        }
-        
-        
-        return $tickets_array;
-        
+        return $result;
     }
-    
-    protected function getTicketAgentData(int $ticket_id): array {
-        
+
+    protected function loadTicketAgents(array $params): array {
         $sql = <<<FIN
-                DROP TEMPORARY TABLE IF EXISTS vt_bound_agents;
-                
-                CREATE TEMPORARY TABLE vt_bound_agents SELECT
-                    user_id AS agent_id
-                FROM 
-                    [topic_admins]
-                WHERE
-                    topic_number = :ticket_id
-                
-                UNION
-                
-                SELECT DISTINCT
-                    subject
-                FROM 
-                    [timers] AS timers
-                    INNER JOIN [timer_events] AS events ON timers.id = events.timer
-                WHERE
-                    events.object = :ticket_id;
-                
                 SELECT
+                    bound.ticket_id,
                     bound.agent_id AS id,
                     CASE 
                         WHEN ta.user_id IS NULL THEN FALSE
@@ -281,32 +252,74 @@ class getDashboardData extends AbstractFunctionImplementation {
                         ELSE TIMESTAMPDIFF(SECOND, e0.start_time, NOW()) 
                     END) AS seconds_today
                 FROM
-                    vt_bound_agents AS bound
-                    LEFT JOIN [topic_admins] AS ta ON ta.user_id = bound.agent_id AND ta.topic_number = :ticket_id
+                    (
+                        SELECT topics.id AS ticket_id, admins.user_id AS agent_id
+                        FROM [topics] AS topics
+                        INNER JOIN [topic_admins] AS admins
+                            ON admins.topic_number = topics.id
+                        WHERE topics.chat_id IN ({{groups}})
+                            AND (
+                                topics.status NOT IN (111, 120)
+                                OR topics.last_activity >= :admin_day_start_unix
+                                OR topics.last_admin_activity >= :admin_day_start_unix
+                            )
+
+                        UNION
+
+                        SELECT topics.id AS ticket_id, event_timers.subject AS agent_id
+                        FROM [topics] AS topics
+                        INNER JOIN [timer_events] AS bound_events
+                            ON bound_events.object = topics.id
+                        INNER JOIN [timers] AS event_timers
+                            ON event_timers.id = bound_events.timer
+                        WHERE topics.chat_id IN ({{groups}})
+                            AND (
+                                topics.status NOT IN (111, 120)
+                                OR topics.last_activity >= :event_day_start_unix
+                                OR topics.last_admin_activity >= :event_day_start_unix
+                            )
+                    ) AS bound
+                    LEFT JOIN [topic_admins] AS ta ON ta.user_id = bound.agent_id AND ta.topic_number = bound.ticket_id
                     INNER JOIN [telle_users] AS tg_users ON tg_users.id = bound.agent_id
                     LEFT JOIN [timers] AS timers ON tg_users.id = timers.subject
-                    LEFT JOIN [timer_events] AS e0 ON timers.id = e0.timer AND e0.object = :ticket_id 
+                    LEFT JOIN [timer_events] AS e0 ON timers.id = e0.timer AND e0.object = bound.ticket_id
                 
                 GROUP BY
-                    id, bound, username, name
-                ;
-
-                DROP TEMPORARY TABLE vt_bound_agents;
-                
+                    bound.ticket_id, id, bound, username, name
                 FIN;
-        
+
+        $sql_groups = $this->normalizeGroups($params);
+        $sql = str_replace('{{groups}}', implode(',', $sql_groups), $sql);
         $today = date_create('today', $this->tz);
         $today->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+        $day_start_unix = date_create('today', $this->tz)->getTimestamp();
 
-        $sth = DB::prepare($sql);
-        $sth->execute([
-            'ticket_id' => $ticket_id,
-            'current_date' => $today->format(DB::DATE_FORMAT)    
+        $agents = new DBView($sql, [
+            'admin_day_start_unix' => $day_start_unix,
+            'event_day_start_unix' => $day_start_unix,
+            'current_date' => $today->format('Y-m-d H:i:s'),
         ]);
-        
-        $sth->nextRowset();
-        $sth->nextRowset();
-        
-        return $sth->fetchAll(\PDO::FETCH_ASSOC);
+        $result = [];
+        while ($agents->next()) {
+            $result[] = [
+                'ticket_id' => $agents->ticket_id,
+                'id' => $agents->id,
+                'bound' => $agents->bound,
+                'username' => $agents->username,
+                'name' => $agents->name,
+                'seconds_total' => $agents->seconds_total,
+                'seconds_today' => $agents->seconds_today,
+            ];
+        }
+        return $result;
+    }
+
+    private function normalizeGroups(array $params): array
+    {
+        $groups = [];
+        foreach ($params['groups'] as $value) {
+            $groups[] = (int) $value;
+        }
+        return $groups;
     }
 }
