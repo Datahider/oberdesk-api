@@ -67,4 +67,11 @@ $source = file_get_contents(dirname(__DIR__) . '/src/functions/get/getDashboardD
 assertSameValue(false, str_contains($source, 'TEMPORARY TABLE'), 'Dashboard does not use temporary tables');
 assertSameValue(false, str_contains($source, 'getTicketAgentData'), 'Dashboard does not load agents per ticket');
 
+$migration_path = dirname(__DIR__) . '/bin/add-dashboard-indexes.php';
+assertSameValue(true, is_file($migration_path), 'Dashboard index migration exists');
+$migration = file_get_contents($migration_path);
+foreach (['dashboard_object_timer', 'dashboard_timer_start', 'dashboard_end_comment_timer', 'dashboard_subject', 'dashboard_chat_role_user'] as $index_name) {
+    assertSameValue(true, str_contains($migration, $index_name), "Migration creates {$index_name}");
+}
+
 echo "OK\n";
