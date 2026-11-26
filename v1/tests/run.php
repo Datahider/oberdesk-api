@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use losthost\OberdeskAPIv1\Controller\PacerTimeEntriesController;
+use losthost\OberdeskAPIv1\Controller\TicketsController;
 
 require dirname(__DIR__) . '/src/Controller/PacerTimeEntriesController.php';
+require dirname(__DIR__) . '/src/Controller/TicketsController.php';
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {
@@ -64,5 +66,54 @@ assertThrows(static fn () => $controller->handle('1', ['comm'], '2026-10-01T00:0
 
 $index = file_get_contents(dirname(__DIR__) . '/index.php');
 assertSameValue(true, str_contains($index, "#^/pacer/time-entries$#"), 'Router exposes pacer endpoint');
+
+$enqueued = [];
+$tickets = new TicketsController(
+    static fn (string $secret): ?array => $secret === 'good-secret' ? ['id' => 5, 'user_id' => 203645978] : null,
+    static fn (int $apikey_id, int $chat_id): bool => $apikey_id === 5 && $chat_id === -1001631150452,
+    static function (int $apikey_id, int $chat_id, int $user_id, string $title, string $text) use (&$enqueued): int {
+        $enqueued[] = [$apikey_id, $chat_id, $user_id, $title, $text];
+        return 77;
+    },
+);
+$body = json_encode(['group_id' => -1001631150452, 'title' => 'Ордер не проведён', 'text' => 'Ошибка проведения']);
+
+$result = $tickets->handle('Bearer good-secret', $body);
+assertSameValue(['ok' => true, 'request_id' => 77], $result, 'Ticket request is accepted');
+assertSameValue(200, $tickets->status, 'Accepted request status');
+assertSameValue([[5, -1001631150452, 203645978, 'Ордер не проведён', 'Ошибка проведения']], $enqueued, 'Request is enqueued with key user');
+
+foreach ([null, '', 'good-secret', 'Basic good-secret', 'Bearer bad-secret'] as $authorization) {
+    $result = $tickets->handle($authorization, $body);
+    assertSameValue(['ok' => false, 'error' => 'unauthorized'], $result, 'Unauthorized: ' . var_export($authorization, true));
+    assertSameValue(401, $tickets->status, 'Unauthorized status');
+}
+
+$result = $tickets->handle('Bearer good-secret', json_encode(['group_id' => -100, 'title' => 't', 'text' => 'x']));
+assertSameValue(['ok' => false, 'error' => 'forbidden'], $result, 'Group without permission is forbidden');
+assertSameValue(403, $tickets->status, 'Forbidden status');
+
+$bad_bodies = [
+    'not json',
+    '[]',
+    json_encode(['title' => 't', 'text' => 'x']),
+    json_encode(['group_id' => 0, 'title' => 't', 'text' => 'x']),
+    json_encode(['group_id' => '-100', 'title' => 't', 'text' => 'x']),
+    json_encode(['group_id' => -1001631150452, 'title' => '', 'text' => 'x']),
+    json_encode(['group_id' => -1001631150452, 'title' => str_repeat('я', 129), 'text' => 'x']),
+    json_encode(['group_id' => -1001631150452, 'title' => 't', 'text' => '']),
+    json_encode(['group_id' => -1001631150452, 'title' => 't']),
+];
+foreach ($bad_bodies as $bad_body) {
+    $result = $tickets->handle('Bearer good-secret', $bad_body);
+    assertSameValue(false, $result['ok'], 'Bad body rejected: ' . $bad_body);
+    assertSameValue(400, $tickets->status, 'Bad body status: ' . $bad_body);
+}
+assertSameValue(1, count($enqueued), 'Rejected requests are not enqueued');
+
+$result = $tickets->handle('Bearer good-secret', json_encode(['group_id' => -1001631150452, 'title' => str_repeat('я', 128), 'text' => 'x']));
+assertSameValue(true, $result['ok'], 'Title of 128 characters is accepted');
+
+assertSameValue(true, str_contains($index, "['POST', '#^/tickets$#', TicketsController::class, 'handle']"), 'Router exposes tickets endpoint');
 
 echo "OK\n";
