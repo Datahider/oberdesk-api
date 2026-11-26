@@ -8,6 +8,7 @@ use losthost\OberdeskAPIv1\Controller\GroupsController;
 use losthost\OberdeskAPIv1\Controller\ThreadController;
 use losthost\OberdeskAPIv1\Controller\ThreadMessagesController;
 use losthost\OberdeskAPIv1\Controller\PacerTimeEntriesController;
+use losthost\OberdeskAPIv1\Controller\TicketsController;
 
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/etc/config.php';
@@ -53,6 +54,7 @@ $routes = [
     ['GET', '#^/thread/([^/]+)$#', ThreadController::class, 'handle'],
     ['GET', '#^/thread/([^/]+)/messages$#', ThreadMessagesController::class, 'handle'],
     ['GET', '#^/pacer/time-entries$#', PacerTimeEntriesController::class, 'handle'],
+    ['POST', '#^/tickets$#', TicketsController::class, 'handle'],
 ];
 
 $method = $_SERVER['REQUEST_METHOD'];
