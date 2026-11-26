@@ -116,4 +116,8 @@ assertSameValue(true, $result['ok'], 'Title of 128 characters is accepted');
 
 assertSameValue(true, str_contains($index, "['POST', '#^/tickets$#', TicketsController::class, 'handle']"), 'Router exposes tickets endpoint');
 
+$tickets_source = file_get_contents(dirname(__DIR__) . '/src/Controller/TicketsController.php');
+assertSameValue(2, substr_count($tickets_source, "new DateTimeImmutable('now', new DateTimeZone('Europe/Moscow'))"), 'Request and job times use Moscow time');
+assertSameValue(false, str_contains($tickets_source, 'new DateTimeImmutable()'), 'No server-timezone timestamps');
+
 echo "OK\n";
