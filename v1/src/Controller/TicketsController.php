@@ -18,6 +18,7 @@ use losthost\telle\model\DBPendingJob;
 final class TicketsController
 {
     private const JOB_CLASS = 'losthost\\Oberbot\\background\\CreateTicketFromApi';
+    private const TYPES = ['regular_task' => 1, 'priority_task' => 2, 'malfunction' => 3];
 
     public int $status = 200;
 
@@ -52,7 +53,7 @@ final class TicketsController
         }
 
         try {
-            [$group_id, $title, $text] = $this->parseBody($body);
+            [$group_id, $title, $text, $type] = $this->parseBody($body);
         } catch (InvalidArgumentException $e) {
             return $this->respond(400, ['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -61,7 +62,7 @@ final class TicketsController
             return $this->respond(403, ['ok' => false, 'error' => 'forbidden']);
         }
 
-        $request_id = ($this->enqueuer)($key['id'], $group_id, $key['user_id'], $title, $text);
+        $request_id = ($this->enqueuer)($key['id'], $group_id, $key['user_id'], $title, $text, $type);
         return $this->respond(200, ['ok' => true, 'request_id' => $request_id]);
     }
 
@@ -80,7 +81,11 @@ final class TicketsController
         if (!isset($data['text']) || !is_string($data['text']) || $data['text'] === '') {
             throw new InvalidArgumentException('text must be a non-empty string');
         }
-        return [$data['group_id'], $data['title'], $data['text']];
+        $type_name = $data['type'] ?? 'regular_task';
+        if (!is_string($type_name) || !isset(self::TYPES[$type_name])) {
+            throw new InvalidArgumentException('type must be one of: ' . implode(', ', array_keys(self::TYPES)));
+        }
+        return [$data['group_id'], $data['title'], $data['text'], self::TYPES[$type_name]];
     }
 
     private function respond(int $status, array $data): array
@@ -110,7 +115,7 @@ final class TicketsController
         return in_array('create_ticket', explode(',', (string) $links[0]->permissions), true);
     }
 
-    private function enqueue(int $apikey_id, int $chat_id, int $user_id, string $title, string $text): int
+    private function enqueue(int $apikey_id, int $chat_id, int $user_id, string $title, string $text, int $type): int
     {
         DB::beginTransaction();
         try {
@@ -120,6 +125,7 @@ final class TicketsController
             $request->user_id = $user_id;
             $request->title = $title;
             $request->text = $text;
+            $request->type = $type;
             $request->created = new DateTimeImmutable('now', new DateTimeZone('Europe/Moscow'));
             $request->write();
             new DBPendingJob(new DateTimeImmutable('now', new DateTimeZone('Europe/Moscow')), true, self::JOB_CLASS, (string) $request->id);
