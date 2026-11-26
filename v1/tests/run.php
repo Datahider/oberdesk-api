@@ -71,8 +71,8 @@ $enqueued = [];
 $tickets = new TicketsController(
     static fn (string $secret): ?array => $secret === 'good-secret' ? ['id' => 5, 'user_id' => 203645978] : null,
     static fn (int $apikey_id, int $chat_id): bool => $apikey_id === 5 && $chat_id === -1001631150452,
-    static function (int $apikey_id, int $chat_id, int $user_id, string $title, string $text) use (&$enqueued): int {
-        $enqueued[] = [$apikey_id, $chat_id, $user_id, $title, $text];
+    static function (int $apikey_id, int $chat_id, int $user_id, string $title, string $text, int $type) use (&$enqueued): int {
+        $enqueued[] = [$apikey_id, $chat_id, $user_id, $title, $text, $type];
         return 77;
     },
 );
@@ -81,7 +81,15 @@ $body = json_encode(['group_id' => -1001631150452, 'title' => 'Ордер не �
 $result = $tickets->handle('Bearer good-secret', $body);
 assertSameValue(['ok' => true, 'request_id' => 77], $result, 'Ticket request is accepted');
 assertSameValue(200, $tickets->status, 'Accepted request status');
-assertSameValue([[5, -1001631150452, 203645978, 'Ордер не проведён', 'Ошибка проведения']], $enqueued, 'Request is enqueued with key user');
+assertSameValue([[5, -1001631150452, 203645978, 'Ордер не проведён', 'Ошибка проведения', 1]], $enqueued, 'Request is enqueued with key user and regular type by default');
+
+foreach (['regular_task' => 1, 'priority_task' => 2, 'malfunction' => 3] as $type_name => $type_value) {
+    $enqueued = [];
+    $result = $tickets->handle('Bearer good-secret', json_encode(['group_id' => -1001631150452, 'title' => 't', 'text' => 'x', 'type' => $type_name]));
+    assertSameValue(true, $result['ok'], "Type $type_name is accepted");
+    assertSameValue($type_value, $enqueued[0][5], "Type $type_name is mapped");
+}
+$enqueued = [[]];
 
 foreach ([null, '', 'good-secret', 'Basic good-secret', 'Bearer bad-secret'] as $authorization) {
     $result = $tickets->handle($authorization, $body);
@@ -103,6 +111,8 @@ $bad_bodies = [
     json_encode(['group_id' => -1001631150452, 'title' => str_repeat('я', 129), 'text' => 'x']),
     json_encode(['group_id' => -1001631150452, 'title' => 't', 'text' => '']),
     json_encode(['group_id' => -1001631150452, 'title' => 't']),
+    json_encode(['group_id' => -1001631150452, 'title' => 't', 'text' => 'x', 'type' => 'consult']),
+    json_encode(['group_id' => -1001631150452, 'title' => 't', 'text' => 'x', 'type' => 3]),
 ];
 foreach ($bad_bodies as $bad_body) {
     $result = $tickets->handle('Bearer good-secret', $bad_body);
