@@ -6,6 +6,7 @@ namespace losthost\OberdeskAPIv1\Controller;
 
 use Closure;
 use DateTimeImmutable;
+use DateTimeZone;
 use InvalidArgumentException;
 use losthost\DB\DB;
 use losthost\DB\DBList;
@@ -119,9 +120,9 @@ final class TicketsController
             $request->user_id = $user_id;
             $request->title = $title;
             $request->text = $text;
-            $request->created = new DateTimeImmutable();
+            $request->created = new DateTimeImmutable('now', new DateTimeZone('Europe/Moscow'));
             $request->write();
-            new DBPendingJob(new DateTimeImmutable(), true, self::JOB_CLASS, (string) $request->id);
+            new DBPendingJob(new DateTimeImmutable('now', new DateTimeZone('Europe/Moscow')), true, self::JOB_CLASS, (string) $request->id);
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
